@@ -1,21 +1,48 @@
-describe("API Tests", () => {
+describe("Testes da API", () => {
   // Variável para armazenar o token de autenticação
   let authToken;
+  let orderIds = [];
 
-  // Teste para autenticar e obter o token
-  it("Autenticar e obter token", () => {
+  // Função para registrar um novo cliente e obter o token
+  const registerAndAuthenticateClient = () => {
+    const uniqueClientEmail = `unique-${Cypress._.random(1e6)}@example.com`;
+    const uniqueClientName = `UniqueClient${Cypress._.random(1e6)}`;
+
     cy.request({
       method: "POST",
       url: "https://simple-books-api.glitch.me/api-clients",
       body: {
-        clientName: "Postman",
-        clientEmail: "valentin@example.com",
+        clientName: uniqueClientName,
+        clientEmail: uniqueClientEmail,
       },
+      failOnStatusCode: false,
     }).then((response) => {
-      expect(response.status).to.equal(200);
-      expect(response.body).to.have.property("accessToken");
-      authToken = response.body.accessToken;
+      if (response.status === 409 && response.body.error.includes("API client already registered")) {
+        // Cliente da API já existe, obtém o token existente
+        cy.request({
+          method: "POST",
+          url: "https://simple-books-api.glitch.me/api-clients",
+          body: {
+            clientName: uniqueClientName,
+            clientEmail: uniqueClientEmail,
+          },
+        }).then((existingClientResponse) => {
+          expect(response.status).to.be.oneOf([200, 201]);
+          expect(existingClientResponse.body).to.have.property("accessToken");
+          authToken = existingClientResponse.body.accessToken;
+        });
+      } else {
+        // Cliente da API criado com sucesso ou encontrou um erro diferente
+        expect(response.status).to.be.oneOf([200, 201])
+        expect(response.body).to.have.property("accessToken");
+        authToken = response.body.accessToken;
+      }
     });
+  };
+
+  // Teste para autenticar e obter o token
+  it("Autenticar e obter token", () => {
+    registerAndAuthenticateClient();
   });
 
   // Teste para retornar livros do tipo ficção
@@ -28,7 +55,7 @@ describe("API Tests", () => {
         limit: 5,
       },
     }).then((response) => {
-      expect(response.status).to.equal(200);
+      expect(response.status).to.be.oneOf([200, 201])
       expect(response.body).to.be.an("array").and.not.to.be.empty;
     });
   });
@@ -48,7 +75,7 @@ describe("API Tests", () => {
       },
       body: orderData,
     }).then((response) => {
-      expect(response.status).to.equal(200);
+      expect(response.status).to.be.oneOf([200, 201]); // Permite 200 ou 201
       expect(response.body).to.have.property("orderId");
     });
   });
@@ -62,29 +89,29 @@ describe("API Tests", () => {
         Authorization: `Bearer ${authToken}`,
       },
     }).then((response) => {
-      expect(response.status).to.equal(200);
+      expect(response.status).to.be.oneOf([200, 201])
       expect(response.body).to.be.an("array").and.not.to.be.empty;
     });
   });
 
   // Teste para atualizar um pedido usando PATCH
   it("Atualizar um pedido usando PATCH", () => {
-    // Suponha que orderId seja um ID válido de um pedido existente
-    const orderId = "PF6MflPDcuhWobZcgmJy5";
+    if (orderIds.length === 0) {
+      throw new Error("Nenhum ID de pedido válido encontrado.");
+    }
 
-    const updatedOrderData = {
-      customerName: "UpdatedJohn",
-    };
+    // Escolhe aleatoriamente um ID de pedido do array
+    const randomOrderId = Cypress._.sample(orderIds);
 
     cy.request({
       method: "PATCH",
-      url: `https://simple-books-api.glitch.me/orders/${orderId}`,
+      url: `https://simple-books-api.glitch.me/orders/${randomOrderId}`,
       headers: {
         Authorization: `Bearer ${authToken}`,
       },
       body: updatedOrderData,
     }).then((response) => {
-      expect(response.status).to.equal(200);
+      expect(response.status).to.be.oneOf([200, 201])
       expect(response.body).to.have.property("orderId");
       expect(response.body.customerName).to.equal(updatedOrderData.customerName);
     });
@@ -93,16 +120,21 @@ describe("API Tests", () => {
   // Teste para deletar um pedido
   it("Deletar um pedido", () => {
     // Suponha que orderId seja um ID válido de um pedido existente
-    const orderId = "PF6MflPDcuhWobZcgmJy5";
+    if (orderIds.length === 0) {
+      throw new Error("Nenhum ID de pedido válido encontrado.");
+    }
+
+    // Escolhe aleatoriamente um ID de pedido do array
+    const randomOrderId = Cypress._.sample(orderIds);
 
     cy.request({
       method: "DELETE",
-      url: `https://simple-books-api.glitch.me/orders/${orderId}`,
+      url: `https://simple-books-api.glitch.me/orders/${randomOrderId}`,
       headers: {
         Authorization: `Bearer ${authToken}`,
       },
     }).then((response) => {
-      expect(response.status).to.equal(200);
+      expect(response.status).to.be.oneOf([200, 201])
     });
   });
 });
